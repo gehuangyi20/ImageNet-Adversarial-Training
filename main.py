@@ -26,7 +26,7 @@ from third_party.imagenet_utils import get_val_dataflow, eval_on_ILSVRC12
 from third_party.utils import HorovodClassificationError
 
 
-def create_eval_callback(name, tower_func, condition):
+def create_eval_callback(name, tower_func, condition, image_size=224):
     """
     Create a distributed evaluation callback.
 
@@ -37,7 +37,7 @@ def create_eval_callback(name, tower_func, condition):
     """
     dataflow = get_val_dataflow(
         args.data, args.batch,
-        num_splits=hvd.size(), split_index=hvd.rank())
+        num_splits=hvd.size(), split_index=hvd.rank(), image_size=image_size)
     # We eval both the classification error rate (for comparison with defenders)
     # and the attack success rate (for comparison with attackers).
     infs = [HorovodClassificationError('wrong-top1', '{}-top1-error'.format(name)),
@@ -53,13 +53,13 @@ def create_eval_callback(name, tower_func, condition):
     return cb
 
 
-def do_train(model):
+def do_train(model, image_size=224):
     batch = args.batch
     total_batch = batch * hvd.size()
 
     if args.fake:
         data = FakeData(
-            [[batch, 224, 224, 3], [batch]], 1000,
+            [[batch, image_size, image_size, 3], [batch]], 1000,
             random=False, dtype=['uint8', 'int32'])
         data = StagingInput(QueueInput(data))
         callbacks = []
@@ -116,7 +116,7 @@ def do_train(model):
                 name,
                 model.get_inference_func(attacker),
                 # always eval in the last 2 epochs no matter what
-                lambda epoch_num: condition(epoch_num) or epoch_num > max_epoch - 2)
+                lambda epoch_num: condition(epoch_num) or epoch_num > max_epoch - 2, image_size=image_size)
             callbacks.append(cb)
 
         add_eval_callback('eval-clean', NoOpAttacker(), lambda e: True)
@@ -158,6 +158,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-zmq-ops', help='Use pure python to send/receive data',
                         action='store_true')
     parser.add_argument('--batch', help='Per-GPU batch size', default=32, type=int)
+    parser.add_argument('--image-size', help='image_size', default=224, type=int)
 
     # attacker flags:
     parser.add_argument('--attack-iter', help='Adversarial attack iteration',
@@ -207,7 +208,7 @@ if __name__ == '__main__':
             cb = create_eval_callback(
                 "eval",
                 model.get_inference_func(attacker),
-                lambda e: True)
+                lambda e: True, image_size=args.image_size)
             trainer = HorovodTrainer()
             trainer.setup_graph(model.get_input_signature(), PlaceholderInput(), model.build_graph, model.get_optimizer)
             # train for an empty epoch, to reuse the distributed evaluation code
@@ -224,7 +225,7 @@ if __name__ == '__main__':
         # Also do a naive resize to 224.
         ds = MapData(
             ds,
-            lambda dp: [cv2.resize(dp[0][:, :, ::-1], (224, 224), interpolation=cv2.INTER_CUBIC)])
+            lambda dp: [cv2.resize(dp[0][:, :, ::-1], (args.image_size, args.image_size), interpolation=cv2.INTER_CUBIC)])
         ds = BatchData(ds, args.batch, remainder=True)
 
         pred_config = PredictConfig(
@@ -249,10 +250,10 @@ if __name__ == '__main__':
         logger.info("Training on {}".format(socket.gethostname()))
         logdir = os.path.join(
             'train_log',
-            'PGD-{}{}-Batch{}-{}GPUs-iter{}-epsilon{}-step{}{}'.format(
+            'PGD-{}{}-Batch{}-{}GPUs-iter{}-epsilon{}-step{}{}-imagesize{}'.format(
                 args.arch, args.depth, args.batch, hvd.size(),
                 args.attack_iter, args.attack_epsilon, args.attack_step_size,
-                '-' + args.logdir if args.logdir else ''))
+                '-' + args.logdir if args.logdir else '', args.image_size))
 
         if hvd.rank() == 0:
             # old log directory will be automatically removed.
@@ -260,4 +261,4 @@ if __name__ == '__main__':
         logger.info("CMD: " + " ".join(sys.argv))
         logger.info("Rank={}, Local Rank={}, Size={}".format(hvd.rank(), hvd.local_rank(), hvd.size()))
 
-        do_train(model)
+        do_train(model, image_size=args.image_size)

@@ -20,6 +20,7 @@ NUM_BLOCKS = {
 class ResNetModel(AdvImageNetModel):
     def __init__(self, args):
         self.num_blocks = NUM_BLOCKS[args.depth]
+        self.image_shape = args.image_size
 
     def get_logits(self, image):
         return resnet_backbone(image, self.num_blocks, resnet_group, resnet_bottleneck)
@@ -28,6 +29,7 @@ class ResNetModel(AdvImageNetModel):
 class ResNetDenoiseModel(AdvImageNetModel):
     def __init__(self, args):
         self.num_blocks = NUM_BLOCKS[args.depth]
+        self.image_shape = args.image_size
 
     def get_logits(self, image):
 
@@ -50,6 +52,7 @@ class ResNeXtDenoiseAllModel(AdvImageNetModel):
     """
     def __init__(self, args):
         self.num_blocks = NUM_BLOCKS[args.depth]
+        self.image_shape = args.image_size
 
     def get_logits(self, image):
 

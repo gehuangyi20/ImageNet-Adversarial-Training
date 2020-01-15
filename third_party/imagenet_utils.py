@@ -20,13 +20,13 @@ from tensorpack.tfutils.summary import add_moving_summary
 from tensorpack.utils import logger
 
 
-def fbresnet_augmentor(isTrain):
+def fbresnet_augmentor(isTrain, image_size=224):
     """
     Augmentor used in fb.resnet.torch, for BGR images in range [0,255].
     """
     if isTrain:
         augmentors = [
-            imgaug.GoogleNetRandomCropAndResize(interp=cv2.INTER_CUBIC),
+            imgaug.GoogleNetRandomCropAndResize(interp=cv2.INTER_CUBIC, target_shape=image_size),
             # It's OK to remove the following augs if your CPU is not fast enough.
             # Removing brightness/contrast/saturation does not have a significant effect on accuracy.
             # Removing lighting leads to a tiny drop in accuracy.
@@ -49,7 +49,7 @@ def fbresnet_augmentor(isTrain):
     else:
         augmentors = [
             imgaug.ResizeShortestEdge(256, cv2.INTER_CUBIC),
-            imgaug.CenterCrop((224, 224)),
+            imgaug.CenterCrop((image_size, image_size)),
         ]
     return augmentors
 
@@ -57,9 +57,9 @@ def fbresnet_augmentor(isTrain):
 def get_val_dataflow(
         datadir, batch_size,
         augmentors=None, parallel=None,
-        num_splits=None, split_index=None):
+        num_splits=None, split_index=None, image_size=224):
     if augmentors is None:
-        augmentors = fbresnet_augmentor(False)
+        augmentors = fbresnet_augmentor(False, image_size=image_size)
     assert datadir is not None
     assert isinstance(augmentors, list)
     if parallel is None:

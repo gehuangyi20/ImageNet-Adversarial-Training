@@ -14,7 +14,7 @@ from tensorpack.utils import logger
 from imagenet_utils import fbresnet_augmentor
 
 
-def get_data(batch, augmentors):
+def get_data(batch, augmentors, workers):
     """
     Sec 3, Remark 4:
     Use a single random shuffling of the training data (per epoch) that is divided amongst all k workers.
@@ -23,14 +23,18 @@ def get_data(batch, augmentors):
     """
     ds = dataset.ILSVRC12(args.data, 'train', shuffle=True)
     ds = AugmentImageComponent(ds, augmentors, copy=False)
+    ds = PrefetchDataZMQ(ds, workers)
     ds = BatchData(ds, batch, remainder=False)
-    ds = PrefetchDataZMQ(ds, min(50, mp.cpu_count()))
     return ds
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', help='ILSVRC dataset dir')
+    parser.add_argument('--image-size', help='image_size',
+                        default=224, type=int)
+    parser.add_argument('--worker', help='number of workers',
+                        default=mp.cpu_count(), type=int)
     parser.add_argument('--fake', action='store_true')
     parser.add_argument('--batch', help='per-GPU batch size',
                         default=32, type=int)
@@ -42,11 +46,11 @@ if __name__ == '__main__':
 
     if args.fake:
         ds = FakeData(
-            [[args.batch, 224, 224, 3], [args.batch]],
+            [[args.batch, args.image_size, args.image_size, 3], [args.batch]],
             1000, random=False, dtype=['uint8', 'int32'])
     else:
-        augs = fbresnet_augmentor(True)
-        ds = get_data(args.batch, augs)
+        augs = fbresnet_augmentor(True, image_size=args.image_size)
+        ds = get_data(args.batch, augs, args.worker)
 
     logger.info("Serving data on {}".format(socket.gethostname()))
 
