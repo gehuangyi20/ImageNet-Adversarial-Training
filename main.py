@@ -268,4 +268,4 @@ if __name__ == '__main__':
         logger.info("CMD: " + " ".join(sys.argv))
         logger.info("Rank={}, Local Rank={}, Size={}".format(hvd.rank(), hvd.local_rank(), hvd.size()))
 
-        do_train(model, image_size=args.image_size)
+        do_train(model, image_size=args.image_size, buffer_size=args.warmup)
