@@ -38,6 +38,8 @@ if __name__ == '__main__':
     parser.add_argument('--fake', action='store_true')
     parser.add_argument('--batch', help='per-GPU batch size',
                         default=32, type=int)
+    parser.add_argument('--warmup', help='prefetch buffer size',
+                        default=150, type=int)
     parser.add_argument('--benchmark', action='store_true')
     parser.add_argument('--no-zmq-ops', action='store_true')
     args = parser.parse_args()
@@ -62,4 +64,4 @@ if __name__ == '__main__':
         format = None if args.no_zmq_ops else 'zmq_ops'
         send_dataflow_zmq(
             ds, 'ipc://@imagenet-train-b{}'.format(args.batch),
-            hwm=2000, format=format, bind=True)
+            hwm=150, format=format, bind=True)

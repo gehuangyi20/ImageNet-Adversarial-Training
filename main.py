@@ -53,7 +53,7 @@ def create_eval_callback(name, tower_func, condition, image_size=224):
     return cb
 
 
-def do_train(model, image_size=224):
+def do_train(model, image_size=224, buffer_size=2000):
     batch = args.batch
     total_batch = batch * hvd.size()
 
@@ -68,7 +68,7 @@ def do_train(model, image_size=224):
         logger.info("#Tower: {}; Batch size per tower: {}".format(hvd.size(), batch))
         zmq_addr = 'ipc://@imagenet-train-b{}'.format(batch)
         if args.no_zmq_ops:
-            dataflow = RemoteDataZMQ(zmq_addr, hwm=2000, bind=False)
+            dataflow = RemoteDataZMQ(zmq_addr, hwm=buffer_size, bind=False)
             data = QueueInput(dataflow)
         else:
             data = ZMQInput(zmq_addr, 30, bind=False)
@@ -159,6 +159,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--batch', help='Per-GPU batch size', default=32, type=int)
     parser.add_argument('--image-size', help='image_size', default=224, type=int)
+    parser.add_argument('--warmup', help='prefetch buffer size',
+                        default=2000, type=int)
 
     # attacker flags:
     parser.add_argument('--attack-iter', help='Adversarial attack iteration',
