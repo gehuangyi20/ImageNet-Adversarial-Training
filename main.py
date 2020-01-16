@@ -68,7 +68,7 @@ def do_train(model, image_size=224):
         logger.info("#Tower: {}; Batch size per tower: {}".format(hvd.size(), batch))
         zmq_addr = 'ipc://@imagenet-train-b{}'.format(batch)
         if args.no_zmq_ops:
-            dataflow = RemoteDataZMQ(zmq_addr, hwm=150, bind=False)
+            dataflow = RemoteDataZMQ(zmq_addr, hwm=2000, bind=False)
             data = QueueInput(dataflow)
         else:
             data = ZMQInput(zmq_addr, 30, bind=False)
@@ -196,6 +196,11 @@ if __name__ == '__main__':
 
     os.system("nvidia-smi")
     hvd.init()
+    gpu_thread_count = 2
+    os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
+    os.environ['TF_GPU_THREAD_COUNT'] = str(gpu_thread_count)
+    os.environ['TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT'] = '1'
+    os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
 
     if args.eval:
         sessinit = SmartInit(args.load)

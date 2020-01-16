@@ -62,4 +62,4 @@ if __name__ == '__main__':
         format = None if args.no_zmq_ops else 'zmq_ops'
         send_dataflow_zmq(
             ds, 'ipc://@imagenet-train-b{}'.format(args.batch),
-            hwm=150, format=format, bind=True)
+            hwm=2000, format=format, bind=True)
