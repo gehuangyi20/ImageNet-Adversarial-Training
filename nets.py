@@ -8,6 +8,8 @@ from adv_model import AdvImageNetModel
 from resnet_model import (
     resnet_group, resnet_bottleneck, resnet_backbone)
 from resnet_model import denoising
+from MagNet.ciphernet.image_palette import ImgPalette
+from MagNet.tf_config import CHANNELS_FIRST
 
 
 NUM_BLOCKS = {
@@ -68,3 +70,15 @@ class ResNeXtDenoiseAllModel(AdvImageNetModel):
             return l
 
         return resnet_backbone(image, self.num_blocks, resnet_group, block_func)
+
+
+class ResNetDitherModel(ResNetModel):
+    def __init__(self, args):
+        self.palatte = ImgPalette(step=6)
+        super().__init__(args)
+
+    def get_logits(self, image):
+        image = self.palatte.palette_box_float_tf(
+            image, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
+            high=255, low=0, cmin=0, cmax=1)
+        return super(self, image)
