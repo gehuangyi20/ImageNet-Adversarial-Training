@@ -75,10 +75,10 @@ class ResNeXtDenoiseAllModel(AdvImageNetModel):
 class ResNetDitherModel(ResNetModel):
     def __init__(self, args):
         self.palatte = ImgPalette(step=6)
-        super().__init__(args)
+        super(self.__class__, self).__init__(args)
 
     def get_logits(self, image):
         image = self.palatte.palette_box_float_tf(
             image, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
             high=255, low=0, cmin=0, cmax=1)
-        return super(self, image)
+        return super().get_logits(image)
