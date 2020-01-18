@@ -193,7 +193,7 @@ if __name__ == '__main__':
             prob_start_from_clean=0.2 if not args.eval else 0.0)
         if args.use_fp16xla:
             attacker.USE_FP16 = True
-            attacker.USE_XLA = True
+            attacker.USE_XLA = False if args.arch.endswith("Dither") else True
     model.set_attacker(attacker)
 
     os.system("nvidia-smi")
