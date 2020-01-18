@@ -48,7 +48,7 @@ def fbresnet_augmentor(isTrain, image_size=224):
         ]
     else:
         augmentors = [
-            imgaug.ResizeShortestEdge(256, cv2.INTER_CUBIC),
+            imgaug.ResizeShortestEdge(int(8/7*image_size), cv2.INTER_CUBIC),
             imgaug.CenterCrop((image_size, image_size)),
         ]
     return augmentors
