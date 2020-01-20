@@ -191,6 +191,16 @@ class ImageNetModel(ModelDesc):
             Nx#class logits
         """
 
+    @abstractmethod
+    def get_logits_raw(self, image):
+        """
+        Args:
+            image: 4D tensor of ``self.input_shape`` in ``self.data_format``
+
+        Returns:
+            Nx#class logits
+        """
+
     def optimizer(self):
         lr = tf.get_variable('learning_rate', initializer=0.1, trainable=False)
         tf.summary.scalar('learning_rate-summary', lr)

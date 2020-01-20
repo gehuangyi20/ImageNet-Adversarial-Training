@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import tensorflow as tf
+from MagNet.tf_config import CHANNELS_FIRST
 
 from tensorpack.models import regularize_cost, BatchNorm
 from tensorpack.tfutils.summary import add_moving_summary
@@ -25,7 +26,7 @@ class NoOpAttacker():
     """
     A placeholder attacker which does nothing.
     """
-    def attack(self, image, label, model_func):
+    def attack(self, image, label, model_func, palatte=None):
         return image, -tf.ones_like(label)
 
 
@@ -77,7 +78,7 @@ class PGDAttacker():
         label_offset = tf.random_uniform(tf.shape(label), minval=1, maxval=1000, dtype=tf.int32)
         return tf.floormod(label + label_offset, tf.constant(1000, tf.int32))
 
-    def attack(self, image_clean, label, model_func):
+    def attack(self, image_clean, label, model_func, palatte=None):
         target_label = self._create_random_target(label)
 
         def fp16_getter(getter, *args, **kwargs):
@@ -98,7 +99,7 @@ class PGDAttacker():
                 else:
                     return getter(*args, **kwargs)
 
-        def one_step_attack(adv):
+        def _one_step_attack(adv, adv_orig):
             if not self.USE_FP16:
                 logits = model_func(adv)
             else:
@@ -127,9 +128,42 @@ class PGDAttacker():
             (implemented at https://github.com/MadryLab/cifar10_challenge )
             as the white-box attacker for adversarial training
             """
-            adv = tf.clip_by_value(adv - tf.sign(g) * self.step_size, lower_bound, upper_bound)
+            adv = tf.clip_by_value(adv_orig - tf.sign(g) * self.step_size, lower_bound, upper_bound)
             return adv
 
+        def one_step_attack(adv):
+            return _one_step_attack(adv, adv)
+
+        def one_step_attack_palatte(adv):
+            adv_orig = adv
+            adv = palatte.palette_box_float_tf(
+                adv, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
+                high=255, low=0, cmin=0, cmax=1)
+            return _one_step_attack(adv, adv_orig)
+
+        def one_step_attack_palatte_xla(adv):
+            adv_orig = adv
+            adv = palatte.palette_box_float_tf(
+                adv, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
+                high=255, low=0, cmin=0, cmax=1)
+            return xla.compile(lambda: _one_step_attack(adv, adv_orig))[0]
+
+        if self.USE_XLA:
+            print("===========use XLA")
+            if palatte is None:
+                print("===========palatte is none")
+                att_body = lambda adv: xla.compile(lambda: _one_step_attack(adv, adv))[0]
+            else:
+                print("===========palatte is not none")
+                att_body = one_step_attack_palatte_xla
+        else:
+            print("===========not use XLA")
+            if palatte is None:
+                print("===========palatte is none")
+                att_body = one_step_attack
+            else:
+                print("===========palatte is not none")
+                att_body = one_step_attack_palatte
         """
         Feature Denoising, Sec 6:
         Adversarial perturbation is considered under L∞ norm (i.e., maximum difference for each pixel).
@@ -155,8 +189,9 @@ class PGDAttacker():
         with tf.name_scope('attack_loop'):
             adv_final = tf.while_loop(
                 lambda _: True,
-                one_step_attack if not self.USE_XLA else
-                lambda adv: xla.compile(lambda: one_step_attack(adv))[0],
+                att_body,
+                #one_step_attack if not self.USE_XLA else
+                #lambda adv: xla.compile(lambda: one_step_attack(adv))[0],
                 [start_adv],
                 back_prop=False,
                 maximum_iterations=self.num_iter,
@@ -186,7 +221,11 @@ class AdvImageNetModel(ImageNetModel):
         with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):
             # BatchNorm always comes with trouble. We use the testing mode of it during attack.
             with freeze_collection([tf.GraphKeys.UPDATE_OPS]), argscope(BatchNorm, training=False):
-                image, target_label = self.attacker.attack(image, label, self.get_logits)
+                if hasattr(self, 'palatte'):
+                    print("======palatte")
+                    image, target_label = self.attacker.attack(image, label, self.get_logits_raw, self.palatte)
+                else:
+                    image, target_label = self.attacker.attack(image, label, self.get_logits)
                 image = tf.stop_gradient(image, name='adv_training_sample')
 
             logits = self.get_logits(image)
@@ -219,7 +258,10 @@ class AdvImageNetModel(ImageNetModel):
             assert not self.training
             image = self.image_preprocess(image)
             image = tf.transpose(image, [0, 3, 1, 2])
-            image, target_label = attacker.attack(image, label, self.get_logits)
+            if hasattr(self, 'palatte'):
+                image, target_label = self.attacker.attack(image, label, self.get_logits_raw, self.palatte)
+            else:
+                image, target_label = attacker.attack(image, label, self.get_logits)
             logits = self.get_logits(image)
             ImageNetModel.compute_loss_and_error(logits, label)  # compute top-1 and top-5
             AdvImageNetModel.compute_attack_success(logits, target_label)

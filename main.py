@@ -16,6 +16,7 @@ import socket
 import sys
 
 import horovod.tensorflow as hvd
+import tensorflow as tf
 
 from tensorpack import *
 from tensorpack.tfutils import SmartInit
@@ -24,6 +25,12 @@ import nets
 from adv_model import NoOpAttacker, PGDAttacker
 from third_party.imagenet_utils import get_val_dataflow, eval_on_ILSVRC12
 from third_party.utils import HorovodClassificationError
+
+
+def run_barrier(config):
+    barrier = hvd.allreduce(tf.constant(0, dtype=tf.float32))
+    print(tf.Session(config=config).run(barrier))
+    print("============")
 
 
 def create_eval_callback(name, tower_func, condition, image_size=224):
@@ -66,7 +73,7 @@ def do_train(model, image_size=224, buffer_size=2000):
         steps_per_epoch = 50
     else:
         logger.info("#Tower: {}; Batch size per tower: {}".format(hvd.size(), batch))
-        zmq_addr = 'ipc://@imagenet-train-b{}'.format(batch)
+        zmq_addr = 'ipc://@imagenet-train-b{}-p{}'.format(batch, args.port)
         if args.no_zmq_ops:
             dataflow = RemoteDataZMQ(zmq_addr, hwm=buffer_size, bind=False)
             data = QueueInput(dataflow)
@@ -161,6 +168,7 @@ if __name__ == '__main__':
     parser.add_argument('--image-size', help='image_size', default=224, type=int)
     parser.add_argument('--warmup', help='prefetch buffer size',
                         default=2000, type=int)
+    parser.add_argument('--port', help='server port', default=1000, type=int)
 
     # attacker flags:
     parser.add_argument('--attack-iter', help='Adversarial attack iteration',
@@ -193,7 +201,7 @@ if __name__ == '__main__':
             prob_start_from_clean=0.2 if not args.eval else 0.0)
         if args.use_fp16xla:
             attacker.USE_FP16 = True
-            attacker.USE_XLA = False if args.arch.endswith("Dither") else True
+            attacker.USE_XLA = True #False if args.arch.endswith("Dither") else True
     model.set_attacker(attacker)
 
     os.system("nvidia-smi")
@@ -203,6 +211,12 @@ if __name__ == '__main__':
     os.environ['TF_GPU_THREAD_COUNT'] = str(gpu_thread_count)
     os.environ['TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT'] = '1'
     os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
+
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    config.gpu_options.visible_device_list = str(hvd.local_rank())
+    config.gpu_options.per_process_gpu_memory_fraction = 0.45
+    run_barrier(config)
 
     if args.eval:
         sessinit = SmartInit(args.load)

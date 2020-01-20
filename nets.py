@@ -83,6 +83,9 @@ class ResNetDitherModel(ResNetModel):
             high=255, low=0, cmin=0, cmax=1)
         return super(self.__class__, self).get_logits(image)
 
+    def get_logits_raw(self, image):
+        return super(self.__class__, self).get_logits(image)
+
 
 class ResNetDenoiseDitherModel(ResNetDenoiseModel):
     def __init__(self, args):
@@ -93,6 +96,9 @@ class ResNetDenoiseDitherModel(ResNetDenoiseModel):
         image = self.palatte.palette_box_float_tf(
             image, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
             high=255, low=0, cmin=0, cmax=1)
+        return super(self.__class__, self).get_logits(image)
+
+    def get_logits_raw(self, image):
         return super(self.__class__, self).get_logits(image)
 
 

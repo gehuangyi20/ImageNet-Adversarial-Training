@@ -40,6 +40,8 @@ if __name__ == '__main__':
                         default=32, type=int)
     parser.add_argument('--warmup', help='prefetch buffer size',
                         default=150, type=int)
+    parser.add_argument('--port', help='server port',
+                        default=1000, type=int)
     parser.add_argument('--benchmark', action='store_true')
     parser.add_argument('--no-zmq-ops', action='store_true')
     args = parser.parse_args()
@@ -63,5 +65,5 @@ if __name__ == '__main__':
     else:
         format = None if args.no_zmq_ops else 'zmq_ops'
         send_dataflow_zmq(
-            ds, 'ipc://@imagenet-train-b{}'.format(args.batch),
+            ds, 'ipc://@imagenet-train-b{}-p{}'.format(args.batch, args.port),
             hwm=args.warmup, format=format, bind=True)
