@@ -138,14 +138,14 @@ class PGDAttacker():
             adv_orig = adv
             adv = palatte.palette_box_float_tf(
                 adv, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
-                high=255, low=0, cmin=0, cmax=1)
+                high=255, low=0, cmin=-1, cmax=1)
             return _one_step_attack(adv, adv_orig)
 
         def one_step_attack_palatte_xla(adv):
             adv_orig = adv
             adv = palatte.palette_box_float_tf(
                 adv, data_format=CHANNELS_FIRST, name="PaletteBoxFloat",
-                high=255, low=0, cmin=0, cmax=1)
+                high=255, low=0, cmin=-1, cmax=1)
             return xla.compile(lambda: _one_step_attack(adv, adv_orig))[0]
 
         if self.USE_XLA:
