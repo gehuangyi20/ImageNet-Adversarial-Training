@@ -222,7 +222,7 @@ if __name__ == '__main__':
         sessinit = SmartInit(args.load)
         if hvd.size() == 1:
             # single-GPU eval, slow
-            ds = get_val_dataflow(args.data, args.batch)
+            ds = get_val_dataflow(args.data, args.batch, image_size=args.image_size)
             eval_on_ILSVRC12(model, sessinit, ds)
         else:
             logger.info("CMD: " + " ".join(sys.argv))
