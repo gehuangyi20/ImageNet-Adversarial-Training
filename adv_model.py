@@ -259,7 +259,7 @@ class AdvImageNetModel(ImageNetModel):
             image = self.image_preprocess(image)
             image = tf.transpose(image, [0, 3, 1, 2])
             if hasattr(self, 'palatte'):
-                image, target_label = self.attacker.attack(image, label, self.get_logits_raw, self.palatte)
+                image, target_label = attacker.attack(image, label, self.get_logits_raw, self.palatte)
             else:
                 image, target_label = attacker.attack(image, label, self.get_logits)
             logits = self.get_logits(image)
