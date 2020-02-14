@@ -256,13 +256,13 @@ class AdvImageNetModel(ImageNetModel):
 
         def tower_func(image, label):
             assert not self.training
-            image = self.image_preprocess(image)
-            image = tf.transpose(image, [0, 3, 1, 2])
+            image_orig = self.image_preprocess(image)
+            image_input = tf.transpose(image_orig, [0, 3, 1, 2])
             if hasattr(self, 'palatte'):
-                image, target_label = attacker.attack(image, label, self.get_logits_raw, self.palatte)
+                image_adv, target_label = attacker.attack(image_input, label, self.get_logits_raw, self.palatte)
             else:
-                image, target_label = attacker.attack(image, label, self.get_logits)
-            logits = self.get_logits(image)
+                image_adv, target_label = attacker.attack(image_input, label, self.get_logits)
+            logits = self.get_logits(image_adv)
             ImageNetModel.compute_loss_and_error(logits, label)  # compute top-1 and top-5
             AdvImageNetModel.compute_attack_success(logits, target_label)
 
