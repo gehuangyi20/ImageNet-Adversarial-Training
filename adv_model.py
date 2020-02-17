@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import tensorflow as tf
+import horovod.tensorflow as hvd
 from MagNet.tf_config import CHANNELS_FIRST
 
 from tensorpack.models import regularize_cost, BatchNorm
@@ -241,14 +242,29 @@ class AdvImageNetModel(ImageNetModel):
                                   name='l2_regularize_loss')
         add_moving_summary(loss, wd_loss)
         total_cost = tf.add_n([loss, wd_loss], name='cost')
-
+        self.step = 1
         if self.loss_scale != 1.:
             logger.info("Scaling the total loss by {} ...".format(self.loss_scale))
             return total_cost * self.loss_scale
         else:
             return total_cost
 
-    def get_inference_func(self, attacker):
+    def get_inference_func(self, attacker, save=False, trainer=None):
+        _self = self
+        global_step = tf.train.get_or_create_global_step()
+        global_step = hvd.allreduce(global_step)
+        #print(tf.Session(config=config).run(barrier))
+        #session = tf.Session(config=config)
+        #session.run(tf.initialize_variables([global_step]))
+
+        def _save(image_orig, image_adv, label, target_label, logits):
+            print("********---------", _self.step)
+            _self.step += 1
+
+            session = trainer.sess
+            gstep = session.run(global_step)
+            print(hvd.rank(), hvd.local_rank(), gstep)
+            return image_orig, image_adv, label, target_label, logits
         """
         Returns a tower function to be used for inference. It generates adv
         images with the given attacker and runs classification on it.
@@ -263,9 +279,16 @@ class AdvImageNetModel(ImageNetModel):
             else:
                 image_adv, target_label = attacker.attack(image_input, label, self.get_logits)
             logits = self.get_logits(image_adv)
+            #if save:
+            image_orig, image_adv, label, target_label, logits = \
+                tf.py_func(_save, [image_orig, image_adv, label, target_label, logits],
+                           [image_orig.dtype, image_adv.dtype, label.dtype, target_label.dtype, logits.dtype])
             ImageNetModel.compute_loss_and_error(logits, label)  # compute top-1 and top-5
             AdvImageNetModel.compute_attack_success(logits, target_label)
 
+            #if save:
+            #    print("********")
+            #    print(hvd.rank(), hvd.local_rank())
         return TowerFunc(tower_func, self.get_input_signature())
 
     def image_preprocess(self, image):

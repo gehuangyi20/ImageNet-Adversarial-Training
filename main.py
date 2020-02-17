@@ -226,11 +226,12 @@ if __name__ == '__main__':
             eval_on_ILSVRC12(model, sessinit, ds)
         else:
             logger.info("CMD: " + " ".join(sys.argv))
+            trainer = HorovodTrainer()
             cb = create_eval_callback(
                 "eval",
-                model.get_inference_func(attacker),
+                model.get_inference_func(attacker, save=True, trainer=trainer),
                 lambda e: True, image_size=args.image_size)
-            trainer = HorovodTrainer()
+
             trainer.setup_graph(model.get_input_signature(), PlaceholderInput(), model.build_graph, model.get_optimizer)
             # train for an empty epoch, to reuse the distributed evaluation code
             trainer.train_with_defaults(
