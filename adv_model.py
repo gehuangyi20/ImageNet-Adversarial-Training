@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import tensorflow as tf
-import horovod.tensorflow as hvd
 from MagNet.tf_config import CHANNELS_FIRST
 
 from tensorpack.models import regularize_cost, BatchNorm
@@ -249,22 +248,14 @@ class AdvImageNetModel(ImageNetModel):
         else:
             return total_cost
 
-    def get_inference_func(self, attacker, save=False, trainer=None):
-        _self = self
-        global_step = tf.train.get_or_create_global_step()
-        global_step = hvd.allreduce(global_step)
+    def get_inference_func(self, attacker, save=False, trainer=None, image_size=64, save_dir=None):
+        if save:
+            from adv_tf_record import save_para_data_obj
+            data_obj = save_para_data_obj(self, trainer, image_size, save_dir)
         #print(tf.Session(config=config).run(barrier))
         #session = tf.Session(config=config)
         #session.run(tf.initialize_variables([global_step]))
 
-        def _save(image_orig, image_adv, label, target_label, logits):
-            print("********---------", _self.step)
-            _self.step += 1
-
-            session = trainer.sess
-            gstep = session.run(global_step)
-            print(hvd.rank(), hvd.local_rank(), gstep)
-            return image_orig, image_adv, label, target_label, logits
         """
         Returns a tower function to be used for inference. It generates adv
         images with the given attacker and runs classification on it.
@@ -273,16 +264,19 @@ class AdvImageNetModel(ImageNetModel):
         def tower_func(image, label):
             assert not self.training
             image_orig = self.image_preprocess(image)
-            image_input = tf.transpose(image_orig, [0, 3, 1, 2])
+            image_orig = tf.transpose(image_orig, [0, 3, 1, 2])
             if hasattr(self, 'palatte'):
-                image_adv, target_label = attacker.attack(image_input, label, self.get_logits_raw, self.palatte)
+                image_adv, target_label = attacker.attack(image_orig, label, self.get_logits_raw, self.palatte)
             else:
-                image_adv, target_label = attacker.attack(image_input, label, self.get_logits)
+                image_adv, target_label = attacker.attack(image_orig, label, self.get_logits)
             logits = self.get_logits(image_adv)
-            #if save:
-            image_orig, image_adv, label, target_label, logits = \
-                tf.py_func(_save, [image_orig, image_adv, label, target_label, logits],
-                           [image_orig.dtype, image_adv.dtype, label.dtype, target_label.dtype, logits.dtype])
+            if save:
+                from adv_tf_record import save_adv
+                save_func = lambda image_orig, image_adv, label, target_label, logits: \
+                    save_adv(image_orig, image_adv, label, target_label, logits, data_obj)
+                image_orig, image_adv, label, target_label, logits = \
+                    tf.py_func(save_func, [image_orig, image_adv, label, target_label, logits],
+                               [image_orig.dtype, image_adv.dtype, label.dtype, target_label.dtype, logits.dtype])
             ImageNetModel.compute_loss_and_error(logits, label)  # compute top-1 and top-5
             AdvImageNetModel.compute_attack_success(logits, target_label)
 

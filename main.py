@@ -158,6 +158,7 @@ if __name__ == '__main__':
 
     # run on a directory of images:
     parser.add_argument('--eval-directory', help='Path to a directory of images to classify.')
+    parser.add_argument('--eval-save-dir', help='Path to save adv data.')
     parser.add_argument('--prediction-file', help='Path to a txt file to write predictions.', default='predictions.txt')
 
     parser.add_argument('--data', help='ILSVRC dataset dir')
@@ -227,9 +228,11 @@ if __name__ == '__main__':
         else:
             logger.info("CMD: " + " ".join(sys.argv))
             trainer = HorovodTrainer()
+            if hvd.rank() == 0:
+                os.makedirs(args.eval_save_dir, exist_ok=True)
             cb = create_eval_callback(
                 "eval",
-                model.get_inference_func(attacker, save=True, trainer=trainer),
+                model.get_inference_func(attacker, save=True, trainer=trainer, image_size=args.image_size, save_dir=args.eval_save_dir),
                 lambda e: True, image_size=args.image_size)
 
             trainer.setup_graph(model.get_input_signature(), PlaceholderInput(), model.build_graph, model.get_optimizer)
