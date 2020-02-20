@@ -54,19 +54,11 @@ def deserialize_att_record(record):
         'diff/l_inf': tf.FixedLenFeature([1], tf.float32, 0),
         'label/adv': tf.FixedLenFeature([1], tf.int64, -1),
         'label/orig': tf.FixedLenFeature([1], tf.int64, -1),
-        #'image/idx': tf.FixedLenFeature([1], tf.int64, -1)
         "label/pred": tf.FixedLenFeature([1000], tf.float32, np.zeros([1000], dtype=np.float32))
     }
 
     with tf.name_scope('deserialize_att_record'):
         obj = tf.parse_single_example(record, feature_map)
-
-        # image_orig = tf.image.decode_png(obj['image/orig'], channels=3)
-        # image_floor = tf.image.decode_png(obj['image/floor'], channels=3)
-        # image_ceil = tf.image.decode_png(obj['image/ceil'], channels=3)
-        # image_round = tf.image.decode_png(obj['image/round'], channels=3)
-
-        # image_float = tf.reshape(tf.decode_raw(obj['image/float'], out_type=tf.float32), obj['image/shape'])
 
         image_orig = obj['image/orig']
         image_floor = obj['image/floor']
@@ -75,13 +67,6 @@ def deserialize_att_record(record):
         image_float = obj['image/float']
 
         image_shape = obj['image/shape']
-
-        # set image shape
-        # image_orig.set_shape([image_size, image_size, None])
-        # image_floor.set_shape([image_size, image_size, None])
-        # image_ceil.set_shape([image_size, image_size, None])
-        # image_round.set_shape([image_size, image_size, None])
-        # image_float.set_shape([image_size, image_size, None])
 
         diff_l0 = tf.squeeze(obj['diff/l0'])
         diff_l1 = tf.squeeze(obj['diff/l1'])
@@ -94,6 +79,39 @@ def deserialize_att_record(record):
 
         return image_orig, image_float, image_floor, image_ceil, image_round, image_shape, \
             diff_l0, diff_l1, diff_l2, diff_l_inf, label_adv, label_orig, image_pred
+
+
+def preprocess_att_record(record, image_size):
+    image_orig, image_float, image_floor, image_ceil, image_round, image_shape, \
+        diff_l0, diff_l1, diff_l2, diff_l_inf, label_adv, label_orig, image_pred = deserialize_att_record(record)
+
+    image_orig = tf.image.decode_png(image_orig, channels=3)
+    image_floor = tf.image.decode_png(image_floor, channels=3)
+    image_ceil = tf.image.decode_png(image_ceil, channels=3)
+    image_round = tf.image.decode_png(image_round, channels=3)
+
+    image_float = tf.reshape(tf.decode_raw(image_float, out_type=tf.float32), image_shape)
+
+    # set image shape
+    image_orig.set_shape([image_size, image_size, None])
+    image_floor.set_shape([image_size, image_size, None])
+    image_ceil.set_shape([image_size, image_size, None])
+    image_round.set_shape([image_size, image_size, None])
+    image_float.set_shape([image_size, image_size, None])
+
+    return image_orig, image_float, image_floor, image_ceil, image_round, image_shape, \
+        diff_l0, diff_l1, diff_l2, diff_l_inf, label_adv, label_orig, image_pred
+
+
+def stat_pred(label_adv, label_orig, image_pred):
+    image_pred_top5 = image_pred.argsort(axis=1)[:, -5:]
+    image_pred_top1 = image_pred.argsort(axis=1)[:, -1:]
+
+    att_success = image_pred_top1.flatten() == label_adv
+    top1_err = image_pred_top1.flatten() != label_orig
+    top5_err = list(map(lambda label, pred: label not in pred, label_orig, image_pred_top5))
+
+    return att_success, top1_err, top5_err
 
 
 def save_para_data_obj(self, trainer=None, image_size=64, save_dir=None):
@@ -110,10 +128,10 @@ def save_para_data_obj(self, trainer=None, image_size=64, save_dir=None):
 
 
 def save_adv(image_orig, image_adv, label, target_label, logits, data_obj):
-    print("********---------", data_obj.self.step)
+    # print("********---------", data_obj.self.step)
 
     session = data_obj.trainer.sess
-    print(hvd.rank(), hvd.local_rank())
+    # print(hvd.rank(), hvd.local_rank())
     output_filename = 'rank-%.5d-%.5d' % (hvd.rank(), data_obj.self.step)
     output_file = os.path.join(data_obj.save_dir, output_filename)
     writer = tf.python_io.TFRecordWriter(output_file)
@@ -147,8 +165,7 @@ def save_adv(image_orig, image_adv, label, target_label, logits, data_obj):
     _img_raw_data = data_obj.op_img_raw_data
     _image_size = data_obj.image_size
 
-    print(np.shape(logits), logits.dtype, type(logits), type(logits[0]))
-    # print(logits[0])
+    # print(np.shape(logits), logits.dtype, type(logits), type(logits[0]))
     for i in range(0, count):
         new_feature_map = {
             "image/orig": _bytes_feature(session.run(_img_compressed, feed_dict={_img_raw_data: out_image_orig[i]})),
@@ -166,7 +183,6 @@ def save_adv(image_orig, image_adv, label, target_label, logits, data_obj):
             "diff/l_inf": _float_feature(dist_l_inf[i]),
             "label/adv": _int64_feature(target_label[i]),
             "label/orig": _int64_feature(label[i]),
-            # "image/idx": _int64_feature(cur_adv_img_idx)
             "label/pred": _float_feature(logits[i])
         }
 
